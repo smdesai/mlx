@@ -511,7 +511,8 @@ void qmv(
   MTL::Size group_dims(bk, 2, 1);
   MTL::Size grid_dims(M, (N + bn - 1) / bn, B);
 
-  bool mixed = scales.dtype() != x.dtype();
+  // Only affine scales are floats; fp modes always carry uint8 scale codes.
+  bool mixed = mode == "affine" && scales.dtype() != x.dtype();
   MTL::ComputePipelineState* kernel;
   if (mixed) {
     // FP32 input, narrower scales: eval_gpu routes only unbatched qmv_fast
@@ -1982,7 +1983,9 @@ void QuantizedMatmul::eval_gpu(const std::vector<array>& inputs, array& out) {
     }
     mode = "affine_sym";
   }
-  if (scales.dtype() != x.dtype()) {
+  // Narrow affine constants for an FP32 input (see quantized_matmul). Fp mode
+  // scales are uint8 codes that the kernels decode, so they must not be cast.
+  if (mode_ == QuantizationMode::Affine && scales.dtype() != x.dtype()) {
     int B = out.size() / M / N;
     bool quad = (K == 128 || (K == 64 && bits_ >= 2)) && is_power_of_2(bits_);
     bool wide = M >= 2 && use_qmv_wide(mode, bits_, M, d);
